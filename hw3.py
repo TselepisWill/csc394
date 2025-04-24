@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 import openai
 from openai import OpenAI
 
-api_key="API_Key"
+api_key="api-key"
 app = FastAPI()
 
 foods_list = ["Banana", "Chicken", "Beef", "Orange", "Broccoli", "Asparagus"]
@@ -112,17 +112,20 @@ async def get_strings(index: int =0):
                 messages=[{"role": "user", "content": prompt}]
 
             )
-            return("suggestion": response.choices[0].message.content)
+            return{"suggestion": response.choices[0].message.content}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
 def build_prompt(user_id):
-    user_history = user_workouts[user_id]
-    user_history_joined = ", ".join(user_history)
-    prompt = (
-        "Based on this user's previous workouts: "
-        + user_history_joined +
-        ", suggest one new workout they haven't done yet. "
-        "Just give the name of the workout. No explanation."
-    )
+    workout_list = user_workouts[user_id]
+    workouts_joined = ", ".join(workout_list)
+    prompt = """Based on this user's previous workouts, suggest one new workout they haven't done yet.
+            Just give the name of the workout. No explanation.
+            """ + workouts_joined
+    
+    print(prompt)
     return prompt
+
+
+
+
