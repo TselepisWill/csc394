@@ -1,23 +1,31 @@
 from fastapi import FastAPI, HTTPException
 import openai
 from openai import OpenAI
+from pydantic import BaseModel
+from typing import List
+from sqlalchemy import Column, Integer, String, create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from fastapi.middleware.cors import CORSMiddleware
+
 
 api_key="api-key"
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # allow your React frontend
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 foods_list = ["Banana", "Chicken", "Beef", "Orange", "Broccoli", "Asparagus"]
-workouts_list = ["Bench-Press", "Squat", "Bicep-Curl", "OverHead-Clean", "Pulldowns"]
+
+
 calories_list = ["310", "1020", "2050", "500", "1560"]
 users_list = ["Mary", "John", "Joseph", "Melanie", "Jackson"]
 
-user_workouts = {
-                1: ["Bench-Press", "Squat", "Bicep-Curl", ],
-                2: ["OverHead-Clean", "Pulldowns", "Tricep Extensions"],
-                3: ["Squat", "Calf-Extension", "Leg-Extensions"],
-                4: ["Mile-Run", "Planks", "Crunches"]
-}
-            
-
+#
 
 #Foods
 
@@ -37,19 +45,74 @@ async def delete_food(index: int = 0):
 
 #Workouts
 
+# ---------- Pydantic Models ----------
+from pydantic import BaseModel
+
+class Workouts(BaseModel):
+    id: int
+    workout_name: str
+    muscle_group: str
+
+    class Config:
+        orm_mode = True
+
+# ---------- SQLite Setup ----------
+SQLALCHEMY_DATABASE_URL = "sqlite:///./workouts.db"
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread":
+False})
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+Base = declarative_base()
+
+# ---------- SQLAlchemy Model ----------
+class WorkoutDB(Base):
+        __tablename__ = "workouts"
+        id = Column(Integer, primary_key=True, index=True)
+        workout_name = Column(String, index=True)
+        muscle_group = Column(String)
+
+## create tables if they don't exist
+Base.metadata.create_all(bind=engine)
+
+# ---------- Routes ----------
 @app.get("/workouts")
-async def get_workouts():
-    return {"workouts": workouts_list}
+def read_workouts():
+    with SessionLocal() as session:
+        workouts = session.query(WorkoutDB).all()
+        return [
+    {
+        "id": w.id,
+        "workout_name": w.workout_name,
+        "muscle_group": w.muscle_group
+    }
+    for w in workouts
+]
 
-@app.post("/workouts")
-async def add_workout(name: str = ""):
-    workouts_list.append(name)
-    return {"workouts": workouts_list}
 
-@app.delete("/workouts")
-async def delete_workout(index: int = 0):
-    workouts_list.pop(index)
-    return {"workouts": workouts_list}
+    
+@app.post("/workouts", response_model=Workouts)
+def create_workout(workout: Workouts):
+    with SessionLocal() as session:
+        db_workout = WorkoutDB(**workout.dict())
+        session.add(db_workout)
+        session.commit()
+        session.refresh(db_workout)
+    return db_workout
+
+@app.delete("/workouts", response_model=Workouts)
+def delete_workout(workout_id: int):
+    with SessionLocal() as session:
+        workout = session.query(WorkoutDB).filter(WorkoutDB.id == workout_id).first()
+        if not workout:
+            raise HTTPException(status_code=404, detail="Workout not found")
+        session.delete(workout)
+        session.commit()
+        return workout
+
+
+
+workouts_list = [
+Workouts(id=1, workout_name="Bench", muscle_group="Chest"),
+]
 
 #Calories
 
@@ -125,7 +188,3 @@ def build_prompt(user_id):
     
     print(prompt)
     return prompt
-
-
-
-
